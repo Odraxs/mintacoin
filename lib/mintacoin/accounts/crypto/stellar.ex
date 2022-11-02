@@ -49,14 +49,12 @@ defmodule Mintacoin.Accounts.Stellar do
   @spec build_create_account_operation(destination :: public_key()) ::
           create_account()
   defp build_create_account_operation(destination) do
-    starting_balance =
-      @starting_balance
-      |> String.to_float()
-
-    CreateAccount.new(
-      destination: destination,
-      starting_balance: starting_balance
-    )
+    @starting_balance
+    |> String.to_float()
+    |> (&CreateAccount.new(
+          destination: destination,
+          starting_balance: &1
+        )).()
   end
 
   @spec build_envelope(
