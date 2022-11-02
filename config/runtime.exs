@@ -73,5 +73,5 @@ if config_env() == :prod do
   config :mintacoin, api_token: System.fetch_env!("API_TOKEN")
 
   # For Accounts creation
-  config :mintacoin, starting_balance: System.fetch_env!("STARTING_BALANCE") || "10.0"
+  config :mintacoin, starting_balance: System.fetch_env!("STARTING_BALANCE")
 end

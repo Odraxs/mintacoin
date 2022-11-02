@@ -23,16 +23,17 @@ defmodule Mintacoin.Accounts.Stellar do
 
   @behaviour Mintacoin.Accounts.Crypto.Spec
 
+  @starting_balance Application.compile_env!(:mintacoin, :starting_balance)
+
   @impl true
   def create_account(_opts) do
     {public_key, secret_key} = KeyPair.random()
-    starting_balance = Application.get_env(:mintacoin, :starting_balance) |> String.to_float()
 
     %{funder_public_key: funder_public_key, funder_signature: funder_signature} =
       funder_account_information()
 
     public_key
-    |> build_create_account_operation(starting_balance)
+    |> build_create_account_operation()
     |> build_envelope(funder_public_key, funder_signature)
     |> execute_transaction(public_key, secret_key)
   end
@@ -45,9 +46,13 @@ defmodule Mintacoin.Accounts.Stellar do
     %{funder_public_key: funder_public_key, funder_signature: funder_signature}
   end
 
-  @spec build_create_account_operation(destination :: public_key(), starting_balance :: float()) ::
+  @spec build_create_account_operation(destination :: public_key()) ::
           create_account()
-  defp build_create_account_operation(destination, starting_balance) do
+  defp build_create_account_operation(destination) do
+    starting_balance =
+      @starting_balance
+      |> String.to_float()
+
     CreateAccount.new(
       destination: destination,
       starting_balance: starting_balance
