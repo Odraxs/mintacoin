@@ -61,7 +61,7 @@ defmodule Mintacoin.Payments.PaymentsTest do
          status: ^status,
          successful: ^successful
        }} =
-        Payments.create(%{
+        Payments.create_db_record(%{
           blockchain_id: blockchain_id,
           source_account_id: source_account_id,
           destination_account_id: destination_account_id,
@@ -83,7 +83,7 @@ defmodule Mintacoin.Payments.PaymentsTest do
            amount: {"can't be blank", _},
            successful: {"can't be blank", _}
          ]
-       }} = Payments.create(%{})
+       }} = Payments.create_db_record(%{})
     end
 
     test "with invalid status", %{
@@ -101,7 +101,7 @@ defmodule Mintacoin.Payments.PaymentsTest do
            | _tail
          ]
        }} =
-        Payments.create(%{
+        Payments.create_db_record(%{
           blockchain_id: blockchain_id,
           source_account_id: source_account_id,
           destination_account_id: destination_account_id,
@@ -128,7 +128,7 @@ defmodule Mintacoin.Payments.PaymentsTest do
            | _tail
          ]
        }} =
-        Payments.create(%{
+        Payments.create_db_record(%{
           blockchain_id: not_existing_uuid,
           source_account_id: source_account_id,
           destination_account_id: destination_account_id,
@@ -155,7 +155,7 @@ defmodule Mintacoin.Payments.PaymentsTest do
            | _tail
          ]
        }} =
-        Payments.create(%{
+        Payments.create_db_record(%{
           blockchain_id: blockchain_id,
           source_account_id: not_existing_uuid,
           destination_account_id: destination_account_id,
@@ -182,7 +182,7 @@ defmodule Mintacoin.Payments.PaymentsTest do
            | _tail
          ]
        }} =
-        Payments.create(%{
+        Payments.create_db_record(%{
           blockchain_id: blockchain_id,
           source_account_id: source_account_id,
           destination_account_id: not_existing_uuid,
@@ -209,7 +209,7 @@ defmodule Mintacoin.Payments.PaymentsTest do
            | _tail
          ]
        }} =
-        Payments.create(%{
+        Payments.create_db_record(%{
           blockchain_id: blockchain_id,
           source_account_id: source_account_id,
           destination_account_id: destination_account_id,
