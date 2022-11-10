@@ -175,8 +175,8 @@ defmodule Mintacoin.Payments do
     difference = Decimal.sub(source_balance, payment_amount)
 
     case Decimal.negative?(difference) do
-      true -> {:ok, balance}
-      false -> {:error, balance}
+      false -> {:ok, balance}
+      true -> {:error, balance}
     end
   end
 
