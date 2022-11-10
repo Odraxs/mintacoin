@@ -57,7 +57,6 @@ defmodule Mintacoin.Payments.Workers.CreatePayment do
       asset_code: asset_code
     ]
     |> Crypto.create_payment()
-    |> update_payment_status(payment_id)
     |> create_blockchain_tx(
       blockchain_id,
       payment_id,
@@ -86,6 +85,8 @@ defmodule Mintacoin.Payments.Workers.CreatePayment do
          source_wallet_id,
          destination_wallet_id
        ) do
+    Payments.update(payment_id, %{status: :completed, successful: true})
+
     {:ok, _balances} =
       process_payment_balance(amount, asset_id, source_wallet_id, destination_wallet_id)
 
@@ -109,6 +110,8 @@ defmodule Mintacoin.Payments.Workers.CreatePayment do
          _source_wallet_id,
          _destination_wallet_id
        ) do
+    Payments.update(payment_id, %{status: :failed, successful: false})
+
     {:ok, blockchain_tx} =
       BlockchainTxs.create(%{
         blockchain_id: blockchain_id,
@@ -121,18 +124,6 @@ defmodule Mintacoin.Payments.Workers.CreatePayment do
       })
 
     {:error, blockchain_tx}
-  end
-
-  defp create_blockchain_tx(
-         {:error, tx_response},
-         _blockchain_id,
-         _payment_id,
-         _asset_id,
-         _amount,
-         _source_wallet_id,
-         _destination_wallet_id
-       ) do
-    {:error, tx_response}
   end
 
   @spec process_payment_balance(
@@ -156,23 +147,5 @@ defmodule Mintacoin.Payments.Workers.CreatePayment do
          {:ok, destination_balance} <- Balances.increase_balance(destination_balance_id, amount) do
       {:ok, %{source_balance: source_balance, destination_balance: destination_balance}}
     end
-  end
-
-  @spec update_payment_status(tx_response(), payment_id :: id()) ::
-          tx_response()
-  defp update_payment_status(
-         {:ok, payment_information},
-         payment_id
-       ) do
-    Payments.update(payment_id, %{status: :completed, successful: true})
-    {:ok, payment_information}
-  end
-
-  defp update_payment_status(
-         {:error, horizon_error},
-         payment_id
-       ) do
-    Payments.update(payment_id, %{status: :failed, successful: false})
-    {:error, horizon_error}
   end
 end
