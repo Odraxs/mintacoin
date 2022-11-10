@@ -25,13 +25,14 @@ defmodule Mintacoin.Payments do
   @type amount :: String.t() | integer() | float()
   @type asset_holder :: {:ok, AssetHolder.t()}
   @type balances :: Balance.t() | []
-  @type error :: Changeset.t()
+  @type error :: Changeset.t() | :invalid_supply_format
   @type id :: UUID.t()
   @type params :: map()
   @type payment :: Payment.t()
   @type payments :: list(payment) | []
   @type signature :: String.t()
 
+  @spec create(params :: params()) :: {:ok, payment()} | {:error, error()}
   def create(%{
         source_signature: source_signature,
         source_account_id: source_account_id,
@@ -48,26 +49,16 @@ defmodule Mintacoin.Payments do
          {:ok, __asset_holder} <- validate_asset_trustline(destination_wallet_id, asset_id),
          {:ok, _source_balance} <-
            validate_source_funds(source_wallet_id, asset_id, amount) do
-      {:ok, payment} =
-        %{
-          blockchain_id: blockchain_id,
-          source_account_id: source_account_id,
-          destination_account_id: destination_account_id,
-          asset_id: asset_id,
-          amount: amount,
-          successful: false
-        }
-        |> create_db_record()
-
-      %{
-        source_signature: source_signature,
-        source_wallet_id: source_wallet_id,
-        destination_wallet_id: destination_wallet_id,
-        blockchain_id: blockchain_id,
-        asset_id: asset_id,
-        amount: amount
-      }
-      |> dispatch_crate_payment_job(payment)
+      process_payment_creation(
+        blockchain_id,
+        source_account_id,
+        destination_account_id,
+        source_signature,
+        source_wallet_id,
+        destination_wallet_id,
+        asset_id,
+        amount
+      )
     end
   end
 
@@ -113,7 +104,7 @@ defmodule Mintacoin.Payments do
     {:ok, Repo.all(query)}
   end
 
-  @spec dispatch_crate_payment_job(
+  @spec dispatch_create_payment_job(
           %{
             :amount => amount(),
             :asset_id => id(),
@@ -124,7 +115,7 @@ defmodule Mintacoin.Payments do
           },
           payment :: payment()
         ) :: {:ok, payment()}
-  defp dispatch_crate_payment_job(
+  defp dispatch_create_payment_job(
          %{
            source_signature: source_signature,
            source_wallet_id: source_wallet_id,
@@ -183,10 +174,51 @@ defmodule Mintacoin.Payments do
     {:ok, source_balance} = Decimal.cast(balance)
     difference = Decimal.sub(source_balance, payment_amount)
 
-    if Decimal.negative?(difference) do
-      {:error, balance}
-    else
-      {:ok, balance}
+    case Decimal.negative?(difference) do
+      true -> {:ok, balance}
+      false -> {:error, balance}
     end
+  end
+
+  @spec process_payment_creation(
+          blockchain_id :: id(),
+          source_account_id :: id(),
+          destination_account_id :: id(),
+          source_signature :: signature(),
+          source_wallet_id :: id(),
+          destination_wallet_id :: id(),
+          asset_id :: id(),
+          amount :: amount()
+        ) :: {:ok, payment()} | {:error, error()}
+  defp process_payment_creation(
+         blockchain_id,
+         source_account_id,
+         destination_account_id,
+         source_signature,
+         source_wallet_id,
+         destination_wallet_id,
+         asset_id,
+         amount
+       ) do
+    {:ok, payment} =
+      %{
+        blockchain_id: blockchain_id,
+        source_account_id: source_account_id,
+        destination_account_id: destination_account_id,
+        asset_id: asset_id,
+        amount: amount,
+        successful: false
+      }
+      |> create_db_record()
+
+    %{
+      source_signature: source_signature,
+      source_wallet_id: source_wallet_id,
+      destination_wallet_id: destination_wallet_id,
+      blockchain_id: blockchain_id,
+      asset_id: asset_id,
+      amount: amount
+    }
+    |> dispatch_create_payment_job(payment)
   end
 end

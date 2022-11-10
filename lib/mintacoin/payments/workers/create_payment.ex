@@ -40,48 +40,51 @@ defmodule Mintacoin.Payments.Workers.CreatePayment do
           "payment_id" => payment_id
         }
       }) do
-    with {:ok, %{code: asset_code}} <- Assets.retrieve_by_id(asset_id),
-         {:ok, %Wallet{public_key: destination_public_key}} <-
-           Wallets.retrieve_by_id(destination_wallet_id),
-         {:ok, %Wallet{encrypted_secret_key: source_encrypted_secret_key}} <-
-           Wallets.retrieve_by_id(source_wallet_id),
-         {:ok, source_secret_key} <- Cipher.decrypt(source_encrypted_secret_key, source_signature) do
-      [
-        source_secret_key: source_secret_key,
-        destination_public_key: destination_public_key,
-        amount: amount,
-        asset_code: asset_code
-      ]
-      |> Crypto.create_payment()
-      |> update_payment_status(payment_id)
-      |> create_blockchain_tx(
-        asset_id,
-        amount,
-        blockchain_id,
-        source_wallet_id,
-        destination_wallet_id,
-        payment_id
-      )
-    end
+    {:ok, %{code: asset_code}} = Assets.retrieve_by_id(asset_id)
+
+    {:ok, %Wallet{public_key: destination_public_key}} =
+      Wallets.retrieve_by_id(destination_wallet_id)
+
+    {:ok, %Wallet{encrypted_secret_key: source_encrypted_secret_key}} =
+      Wallets.retrieve_by_id(source_wallet_id)
+
+    {:ok, source_secret_key} = Cipher.decrypt(source_encrypted_secret_key, source_signature)
+
+    [
+      source_secret_key: source_secret_key,
+      destination_public_key: destination_public_key,
+      amount: amount,
+      asset_code: asset_code
+    ]
+    |> Crypto.create_payment()
+    |> update_payment_status(payment_id)
+    |> create_blockchain_tx(
+      blockchain_id,
+      payment_id,
+      asset_id,
+      amount,
+      source_wallet_id,
+      destination_wallet_id
+    )
   end
 
   @spec create_blockchain_tx(
           tx_response :: tx_response(),
+          blockchain_id :: id(),
+          payment_id :: id(),
           asset_id :: id(),
           amount :: amount(),
-          blockchain_id :: id(),
           source_wallet_id :: id(),
-          destination_wallet_id :: id(),
-          payment_id :: id()
+          destination_wallet_id :: id()
         ) :: {status(), blockchain_tx()}
   defp create_blockchain_tx(
          {:ok, %{successful: true} = tx_response},
+         blockchain_id,
+         payment_id,
          asset_id,
          amount,
-         blockchain_id,
          source_wallet_id,
-         destination_wallet_id,
-         payment_id
+         destination_wallet_id
        ) do
     {:ok, _balances} =
       process_payment_balance(amount, asset_id, source_wallet_id, destination_wallet_id)
@@ -99,12 +102,12 @@ defmodule Mintacoin.Payments.Workers.CreatePayment do
   defp create_blockchain_tx(
          {:ok,
           %{tx_id: tx_id, tx_hash: tx_hash, tx_response: tx_response, tx_timestamp: tx_timestamp}},
+         blockchain_id,
+         payment_id,
          _asset_id,
          _amount,
-         blockchain_id,
          _source_wallet_id,
-         _destination_wallet_id,
-         payment_id
+         _destination_wallet_id
        ) do
     {:ok, blockchain_tx} =
       BlockchainTxs.create(%{
@@ -120,6 +123,18 @@ defmodule Mintacoin.Payments.Workers.CreatePayment do
     {:error, blockchain_tx}
   end
 
+  defp create_blockchain_tx(
+         {:error, tx_response},
+         _blockchain_id,
+         _payment_id,
+         _asset_id,
+         _amount,
+         _source_wallet_id,
+         _destination_wallet_id
+       ) do
+    {:error, tx_response}
+  end
+
   @spec process_payment_balance(
           amount :: amount(),
           asset_id :: id(),
@@ -133,16 +148,14 @@ defmodule Mintacoin.Payments.Workers.CreatePayment do
          source_wallet_id,
          destination_wallet_id
        ) do
-    {:ok, %{id: source_balance_id}} =
-      Balances.retrieve_by_wallet_id_and_asset_id(source_wallet_id, asset_id)
-
-    {:ok, source_balance} = Balances.decrease_balance(source_balance_id, amount)
-
-    {:ok, %{id: destination_balance_id}} =
-      Balances.retrieve_by_wallet_id_and_asset_id(destination_wallet_id, asset_id)
-
-    {:ok, destination_balance} = Balances.increase_balance(destination_balance_id, amount)
-    {:ok, %{source_balance: source_balance, destination_balance: destination_balance}}
+    with {:ok, %{id: source_balance_id}} <-
+           Balances.retrieve_by_wallet_id_and_asset_id(source_wallet_id, asset_id),
+         {:ok, source_balance} <- Balances.decrease_balance(source_balance_id, amount),
+         {:ok, %{id: destination_balance_id}} <-
+           Balances.retrieve_by_wallet_id_and_asset_id(destination_wallet_id, asset_id),
+         {:ok, destination_balance} <- Balances.increase_balance(destination_balance_id, amount) do
+      {:ok, %{source_balance: source_balance, destination_balance: destination_balance}}
+    end
   end
 
   @spec update_payment_status(tx_response(), payment_id :: id()) ::
