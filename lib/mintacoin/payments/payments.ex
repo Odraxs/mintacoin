@@ -25,12 +25,17 @@ defmodule Mintacoin.Payments do
   @type amount :: String.t() | integer() | float()
   @type asset_holder :: {:ok, AssetHolder.t()}
   @type balances :: Balance.t() | []
-  @type error :: Changeset.t() | :invalid_supply_format
   @type id :: UUID.t()
   @type params :: map()
   @type payment :: Payment.t()
   @type payments :: list(payment) | []
   @type signature :: String.t()
+  @type error ::
+          Changeset.t()
+          | :invalid_supply_format
+          | :destination_trustline_not_found
+          | :insuficient_funds
+          | :source_balance_not_found
 
   @spec create(params :: params()) :: {:ok, payment()} | {:error, error()}
   def create(%{
@@ -47,8 +52,9 @@ defmodule Mintacoin.Payments do
          {:ok, %Wallet{id: destination_wallet_id}} <-
            Wallets.retrieve_by_account_id_and_blockchain_id(destination_account_id, blockchain_id),
          {:ok, __asset_holder} <- validate_asset_trustline(destination_wallet_id, asset_id),
-         {:ok, _source_balance} <-
-           validate_source_funds(source_wallet_id, asset_id, amount) do
+         {:ok, balance} <-
+           Balances.retrieve_by_wallet_id_and_asset_id(source_wallet_id, asset_id),
+         {:ok, _source_balance} <- validate_source_funds(balance, amount) do
       process_payment_creation(
         blockchain_id,
         source_account_id,
@@ -60,13 +66,6 @@ defmodule Mintacoin.Payments do
         amount
       )
     end
-  end
-
-  @spec create_db_record(params :: params()) :: {:ok, payment()} | {:error, error()}
-  def create_db_record(params) do
-    %Payment{}
-    |> Payment.create_changeset(params)
-    |> Repo.insert()
   end
 
   @spec update(payment_id :: id(), changes :: params()) :: {:ok, payment()} | {:error, error()}
@@ -102,6 +101,13 @@ defmodule Mintacoin.Payments do
       )
 
     {:ok, Repo.all(query)}
+  end
+
+  @spec create_db_record(params :: params()) :: {:ok, payment()} | {:error, error()}
+  defp create_db_record(params) do
+    %Payment{}
+    |> Payment.create_changeset(params)
+    |> Repo.insert()
   end
 
   @spec dispatch_create_payment_job(
@@ -159,26 +165,25 @@ defmodule Mintacoin.Payments do
     asset_holder = AssetHolders.retrieve_by_wallet_id_and_asset_id(wallet_id, asset_id)
 
     case asset_holder do
-      {:ok, nil} -> {:error, nil}
+      {:ok, nil} -> {:error, :destination_trustline_not_found}
       _any -> {:ok, asset_holder}
     end
   end
 
-  @spec validate_source_funds(source_wallet_id :: id(), asset_id :: id(), amount :: amount()) ::
+  @spec validate_source_funds(balance :: balances(), amount :: amount()) ::
           {:error, amount()} | {:ok, amount()}
-  defp validate_source_funds(source_wallet_id, asset_id, payment_amount) do
-    {:ok, %Balance{balance: balance}} =
-      Balances.retrieve_by_wallet_id_and_asset_id(source_wallet_id, asset_id)
-
+  defp validate_source_funds(%Balance{balance: balance}, payment_amount) do
     {:ok, payment_amount} = Decimal.cast(payment_amount)
     {:ok, source_balance} = Decimal.cast(balance)
     difference = Decimal.sub(source_balance, payment_amount)
 
     case Decimal.negative?(difference) do
       false -> {:ok, balance}
-      true -> {:error, balance}
+      true -> {:error, :insuficient_funds}
     end
   end
+
+  defp validate_source_funds(_balance, _payment_amount), do: {:error, :source_balance_not_found}
 
   @spec process_payment_creation(
           blockchain_id :: id(),

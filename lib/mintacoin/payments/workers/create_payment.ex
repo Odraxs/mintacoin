@@ -139,13 +139,15 @@ defmodule Mintacoin.Payments.Workers.CreatePayment do
          source_wallet_id,
          destination_wallet_id
        ) do
-    with {:ok, %{id: source_balance_id}} <-
-           Balances.retrieve_by_wallet_id_and_asset_id(source_wallet_id, asset_id),
-         {:ok, source_balance} <- Balances.decrease_balance(source_balance_id, amount),
-         {:ok, %{id: destination_balance_id}} <-
-           Balances.retrieve_by_wallet_id_and_asset_id(destination_wallet_id, asset_id),
-         {:ok, destination_balance} <- Balances.increase_balance(destination_balance_id, amount) do
-      {:ok, %{source_balance: source_balance, destination_balance: destination_balance}}
-    end
+    {:ok, %{id: source_balance_id}} =
+      Balances.retrieve_by_wallet_id_and_asset_id(source_wallet_id, asset_id)
+
+    {:ok, source_balance} = Balances.decrease_balance(source_balance_id, amount)
+
+    {:ok, %{id: destination_balance_id}} =
+      Balances.retrieve_by_wallet_id_and_asset_id(destination_wallet_id, asset_id)
+
+    {:ok, destination_balance} = Balances.increase_balance(destination_balance_id, amount)
+    {:ok, %{source_balance: source_balance, destination_balance: destination_balance}}
   end
 end
